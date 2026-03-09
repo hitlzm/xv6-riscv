@@ -1,75 +1,83 @@
 #include "kernel/types.h"
-#include "kernel/fcntl.h"
-#include "kernel/fs.h"
 #include "kernel/stat.h"
+#include "kernel/fs.h"
+#include "kernel/fcntl.h"
 #include "user/user.h"
 
-/* retrieve the filename from whole path */
-char *basename(char *pathname) {
-  char *prev = 0;
-  char *curr = strchr(pathname, '/');
-  while (curr != 0) {
-    prev = curr;
-    curr = strchr(curr + 1, '/');
-  }
-  return prev;
+// return filename from path
+char* basename(char *path)
+{
+  char *p = path + strlen(path);
+
+  while(p >= path && *p != '/')
+    p--;
+
+  return p + 1;
 }
 
-/* recursive */
-void find(char *curr_path, char *target) {
+void find(char *path, char *target)
+{
   char buf[512], *p;
   int fd;
   struct dirent de;
   struct stat st;
-  if ((fd = open(curr_path, O_RDONLY)) < 0) {
-    fprintf(2, "find: cannot open %s\n", curr_path);
+
+  if(stat(path, &st) < 0){
+    fprintf(2, "find: cannot stat %s\n", path);
     return;
   }
 
-  if (fstat(fd, &st) < 0) {
-    fprintf(2, "find: cannot stat %s\n", curr_path);
+  // if it is a file
+  if(st.type == T_FILE){
+    if(strcmp(basename(path), target) == 0)
+      printf("%s\n", path);
+    return;
+  }
+
+  // if it is not directory
+  if(st.type != T_DIR)
+    return;
+
+  if((fd = open(path, 0)) < 0){
+    fprintf(2, "find: cannot open %s\n", path);
+    return;
+  }
+
+  if(strlen(path) + 1 + DIRSIZ + 1 > sizeof(buf)){
+    printf("find: path too long\n");
     close(fd);
     return;
   }
 
-  switch (st.type) {
+  strcpy(buf, path);
+  p = buf + strlen(buf);
+  *p++ = '/';
 
-  case T_FILE:
-    char *f_name = basename(curr_path);
-    int match = 1;
-    if (f_name == 0 || strcmp(f_name + 1, target) != 0) {
-      match = 0;
-    }
-    if (match)
-      printf("%s\n", curr_path);
-    close(fd);
-    break;
+  while(read(fd, &de, sizeof(de)) == sizeof(de)){
+    if(de.inum == 0)
+      continue;
 
-  case T_DIR:
-    // make the next level pathname
-    memset(buf, 0, sizeof(buf));
-    uint curr_path_len = strlen(curr_path);
-    memcpy(buf, curr_path, curr_path_len);
-    buf[curr_path_len] = '/';
-    p = buf + curr_path_len + 1;
-    while (read(fd, &de, sizeof(de)) == sizeof(de)) {
-      if (de.inum == 0 || strcmp(de.name, ".") == 0 ||
-          strcmp(de.name, "..") == 0)
-        continue;
-      memcpy(p, de.name, DIRSIZ);
-      p[DIRSIZ] = 0;
-      find(buf, target); // recurse
-    }
-    close(fd);
-    break;
+    if(strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)
+      continue;
+
+    memmove(p, de.name, DIRSIZ);
+    p[DIRSIZ] = 0;
+
+    find(buf, target);
   }
+
+  close(fd);
 }
 
-int main(int argc, char *argv[]) {
-  if (argc != 3) {
-    fprintf(2, "usage: find [directory] [target filename]\n");
+int
+main(int argc, char *argv[])
+{
+  if(argc != 3){
+    fprintf(2, "usage: find <path> <filename>\n");
     exit(1);
   }
+
   find(argv[1], argv[2]);
+
   exit(0);
 }

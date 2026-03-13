@@ -280,7 +280,7 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
-  
+  np->tracemask=p->tracemask;
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
@@ -291,7 +291,7 @@ fork(void)
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
-  np->tracemask=p->tracemask;
+  
 
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;

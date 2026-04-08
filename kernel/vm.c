@@ -49,14 +49,14 @@ kvmmake(void)
   return kpgtbl;
 }
 
-// Initialize the one kernel_pagetable
+// Initialize the one kernel_pagetable，初始化内核页表，并映射内核使用的物理内存。
 void
 kvminit(void)
 {
   kernel_pagetable = kvmmake();
 }
 
-// Switch h/w page table register to the kernel's page table,
+// Switch h/w page table register to the kernel's page table,切换到内核页表，并刷新TLB。
 // and enable paging.
 void
 kvminithart()
@@ -67,7 +67,7 @@ kvminithart()
 
 // Return the address of the PTE in page table pagetable
 // that corresponds to virtual address va.  If alloc!=0,
-// create any required page-table pages.
+// create any required page-table pages.返回虚拟地址va对应的PTE地址，如果alloc不为0，则在需要时创建页表页。
 //
 // The risc-v Sv39 scheme has three levels of page-table
 // pages. A page-table page contains 512 64-bit PTEs.
@@ -97,7 +97,7 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   return &pagetable[PX(0, va)];
 }
 
-// Look up a virtual address, return the physical address,
+// Look up a virtual address, return the physical address,发现虚拟地址对应的物理地址，如果没有映射或者权限不够则返回0。只能用于用户页面的查找。
 // or 0 if not mapped.
 // Can only be used to look up user pages.
 uint64
@@ -120,7 +120,7 @@ walkaddr(pagetable_t pagetable, uint64 va)
   return pa;
 }
 
-// add a mapping to the kernel page table.
+// add a mapping to the kernel page table.向内核页表添加映射。仅在启动时使用，不刷新TLB。
 // only used when booting.
 // does not flush TLB or enable paging.
 void
@@ -134,6 +134,8 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 // physical addresses starting at pa. va and size might not
 // be page-aligned. Returns 0 on success, -1 if walk() couldn't
 // allocate a needed page-table page.
+//为从va开始的虚拟地址创建PTE，指向从pa开始的物理地址。va和size可能不是页对齐的。
+// 如果walk()无法分配所需的页表页，则返回-1。成功返回0。
 int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
@@ -262,7 +264,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 }
 
 // Recursively free page-table pages.
-// All leaf mappings must already have been removed.
+// All leaf mappings must already have been removed.递归释放页表页。所有叶子映射必须已经被移除。
 void
 freewalk(pagetable_t pagetable)
 {
@@ -431,4 +433,35 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+// Recursive helper
+void vmprint_helper(pagetable_t pagetable, int depth) {
+  static char* indent[] = {
+      "",
+      "..",
+      ".. ..",
+      ".. .. .."
+  };
+  if (depth <= 0 || depth >= 4) {
+    panic("vmprint_helper: depth not in {1, 2, 3}");
+  }
+  // there are 2^9 = 512 PTES in a page table.
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+    if (pte & PTE_V) { //是一个有效的PTE
+      printf("%s%d: pte %p pa %p\n", indent[depth], i, pte, PTE2PA(pte));
+      if ((pte & (PTE_R|PTE_W|PTE_X)) == 0) {
+        // points to a lower-level page table 并且是间接层PTE
+        uint64 child = PTE2PA(pte);
+        vmprint_helper((pagetable_t)child, depth+1); // 递归, 深度+1
+      }
+    }
+  }
+}
+
+// Utility func to print the valid
+// PTEs within a page table recursively
+void vmprint(pagetable_t pagetable) {
+  printf("page table %p\n", pagetable);
+  vmprint_helper(pagetable, 1);
 }

@@ -395,7 +395,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 // Copy a null-terminated string from user to kernel.
 // Copy bytes to dst from virtual address srcva in a given page table,
 // until a '\0', or max.
-// Return 0 on success, -1 on error.
+// Return 0 on success, -1 on error.复制一个以null结尾的字符串从用户空间到内核空间。复制字节到dst，从给定页表中的虚拟地址srcva，直到遇到'\0'或达到max。成功返回0，失败返回-1。
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
@@ -434,34 +434,33 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
-// Recursive helper
-void vmprint_helper(pagetable_t pagetable, int depth) {
-  static char* indent[] = {
-      "",
-      "..",
-      ".. ..",
-      ".. .. .."
-  };
-  if (depth <= 0 || depth >= 4) {
-    panic("vmprint_helper: depth not in {1, 2, 3}");
-  }
-  // there are 2^9 = 512 PTES in a page table.
-  for (int i = 0; i < 512; i++) {
+void
+_vmprint(pagetable_t pagetable, int level){
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
-    if (pte & PTE_V) { //是一个有效的PTE
-      printf("%s%d: pte %p pa %p\n", indent[depth], i, pte, PTE2PA(pte));
-      if ((pte & (PTE_R|PTE_W|PTE_X)) == 0) {
-        // points to a lower-level page table 并且是间接层PTE
-        uint64 child = PTE2PA(pte);
-        vmprint_helper((pagetable_t)child, depth+1); // 递归, 深度+1
+    // PTE_V is a flag for whether the page table is valid
+    if(pte & PTE_V){
+      for (int j = 0; j < level; j++){
+        if (j) printf(" ");
+        printf("..");
+      }
+      uint64 child = PTE2PA(pte);
+      printf("%d: pte %p pa %p\n", i, pte, child);
+      if((pte & (PTE_R|PTE_W|PTE_X)) == 0){
+        // this PTE points to a lower-level page table.
+        _vmprint((pagetable_t)child, level + 1);
       }
     }
   }
 }
 
-// Utility func to print the valid
-// PTEs within a page table recursively
-void vmprint(pagetable_t pagetable) {
+/**
+ * @brief vmprint 打印页表
+ * @param pagetable 所要打印的页表
+ */
+void
+vmprint(pagetable_t pagetable){
   printf("page table %p\n", pagetable);
-  vmprint_helper(pagetable, 1);
+  _vmprint(pagetable, 1);
 }

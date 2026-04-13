@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 
 import re
 from gradelib import *
@@ -41,11 +41,11 @@ def test_pteprint():
     r.run_qemu(shell_script([
         'echo hi'
     ]))
-    r.match('^hi')
+    r.match(r'^hi')
     p = re.compile(VAL_RE)
     d = re.compile(INDENT_RE)
     for l in PTE_PRINT.splitlines():
-        l = d.sub(INDENT_ESC, l)
+        l = d.sub('  ', l)
         l = p.sub(VAL_RE, l)
         r.match(r'^{}$'.format(l))
         if first:
